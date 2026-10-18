@@ -1,0 +1,94 @@
+# charts/microservice/values.yaml
+# Defaults are the SECURE option; services override only what differs.
+# Each service deploys this chart via the ApplicationSet with its own
+# gitops/apps/<service>/values.yaml.
+
+image:
+  repository: ""            # e.g. 123456789012.dkr.ecr.eu-west-1.amazonaws.com/products
+  tag: "latest"             # replaced by CI (update-manifests job)
+  pullPolicy: IfNotPresent
+
+# Used ONLY when autoscaling is disabled — see deployment.yaml for why
+# replicas is deliberately absent from Git when an HPA manages the service.
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+# Ingress is enabled only for the edge service (frontend). host is empty on
+# purpose: an Ingress rule without a host matches ANY Host header, so the
+# demo works against the raw load balancer address with no domain or TLS.
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+
+# CPU-based HPA — requires metrics-server (deployed as a platform app).
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+env: []
+#  - name: PRODUCTS_URL
+#    value: http://products.products.svc.cluster.local
+
+probes:
+  path: /healthz
+
+# Pod/container security contexts are fully values-driven so image-specific
+# needs (e.g. nginx's uid 101) can override without touching templates.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Prometheus Operator picks these up (works because monitoring-values.yaml
+# sets serviceMonitorSelectorNilUsesHelmValues: false). Disabled for
+# frontend: plain nginx exposes no /metrics endpoint.
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+# Default-deny for the pod in both directions. Base rules already allow:
+#   ingress from ingress-nginx and monitoring namespaces, app port
+#   egress   DNS (53 UDP+TCP) to kube-system
+# ingressPeers/egressPeers: lists of NetworkPolicyPeer dicts for anything else.
+# NOTE: policies are only ENFORCED if the CNI supports them — EKS needs the
+# vpc-cni addon with enableNetworkPolicy=true (see terraform/cluster/main.tf),
+# kind needs Calico or the amazon controller. Unenforced, they are inert docs.
+networkPolicy:
+  enabled: true
+  ingressPeers: []
+  #  - namespaceSelector:
+  #      matchLabels: {kubernetes.io/metadata.name: orders}
+  #    podSelector:
+  #      matchLabels: {app.kubernetes.io/instance: orders}
+  egressPeers: []
+
+extraVolumes: []
+extraVolumeMounts: []

@@ -1,0 +1,22 @@
+# terraform — never commit state, or your tfvars (contains your real IP)
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform/cluster/cluster.tfvars
+crash.log
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# secrets / local
+.env
+.env.*
+*.pem
+*.key
+
+# misc
+.DS_Store
+*.log

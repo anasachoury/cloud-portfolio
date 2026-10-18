@@ -1,0 +1,23 @@
+# gitops/apps/products/values.yaml
+image:
+  repository: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/products
+  tag: "latest"          # CI's update-manifests job rewrites this line
+
+env:
+  - name: PYTHONDONTWRITEBYTECODE
+    value: "1"           # read-only root fs: skip pointless __pycache__ writes
+
+networkPolicy:
+  enabled: true
+  ingressPeers:
+    # orders calls products over HTTP
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: orders}
+      podSelector:
+        matchLabels: {app.kubernetes.io/instance: orders}
+    # frontend's nginx proxies /api/products to here
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: frontend}
+      podSelector:
+        matchLabels: {app.kubernetes.io/instance: frontend}
+  egressPeers: []        # products calls nobody: DNS only

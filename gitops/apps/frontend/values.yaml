@@ -1,0 +1,56 @@
+# gitops/apps/frontend/values.yaml
+# nginx-unprivileged (not plain nginx): the chart enforces runAsNonRoot,
+# and the stock image runs as root and would be rejected by the kubelet.
+image:
+  repository: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/frontend
+  tag: "latest"
+
+service:
+  port: 80
+  targetPort: 8080        # nginx-unprivileged listens here, not 80
+
+# Static content: no CPU pattern worth autoscaling on. With autoscaling off,
+# the deployment tracks replicaCount from Git (see chart deployment.yaml).
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""                # matches any Host header -> demo via the LB address
+
+# nginx needs its uid (101) and a writable cache dir under a read-only fs
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  fsGroup: 101           # group-own the emptyDir cache volume
+  seccompProfile:
+    type: RuntimeDefault
+
+extraVolumes:
+  - name: nginx-cache
+    emptyDir: {}
+extraVolumeMounts:
+  - name: nginx-cache
+    mountPath: /var/cache/nginx
+
+# plain nginx exposes no /metrics — no ServiceMonitor for the frontend
+serviceMonitor:
+  enabled: false
+
+# probes hit /healthz on port 8080 — services/frontend's nginx.conf must
+# serve it (location = /healthz { return 200 "ok"; })
+
+networkPolicy:
+  enabled: true
+  # nginx proxies the browser's /api/* calls to the backends
+  egressPeers:
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: products}
+      podSelector:
+        matchLabels: {app.kubernetes.io/instance: products}
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: orders}
+      podSelector:
+        matchLabels: {app.kubernetes.io/instance: orders}

@@ -1,0 +1,14 @@
+# gitops/platform/ingress-nginx.yaml
+controller:
+  replicaCount: 1
+  admissionWebhooks:
+    enabled: false    # saves ~100Mi on t3.medium nodes; fine for a demo cluster
+  resources:
+    requests:
+      cpu: 50m
+      memory: 90Mi
+  service:
+    # default on EKS: in-tree provisioner creates a Classic ELB.
+    # NLB instead would require aws-load-balancer-controller + annotations —
+    # optional polish, roughly the same cost for a demo.
+    annotations: {}

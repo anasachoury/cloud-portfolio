@@ -1,0 +1,50 @@
+# gitops/apps-root/services-appset.yaml
+# One Application per service, generated from this list.
+#   add a service    -> one element here + gitops/apps/<name>/values.yaml
+#   remove a service -> delete the element; prune removes the Application and
+#                       its resources
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]   # typos in .name fail loudly
+  generators:
+    - list:
+        elements:
+          - name: frontend
+          - name: products
+          - name: orders
+  template:
+    metadata:
+      name: "{{.name}}"
+      finalizers:
+        - resources-finalizer.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/anasachoury/cloud-portfolio.git
+        targetRevision: main
+        path: charts/microservice
+        helm:
+          releaseName: "{{.name}}"
+          valueFiles:
+            # Resolved relative to the chart path and may escape it — ArgoCD
+            # docs: values files "can be in a different location... accessed
+            # using a relative path relative to the root directory of the
+            # Helm chart". Same repo, same revision.
+            - ../../gitops/apps/{{.name}}/values.yaml
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.name}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true     # manual edits (image, env, ...) get reverted — demo that.
+                             # replicas is deliberately NOT tracked in Git when the
+                             # HPA is enabled (see chart deployment.yaml), so
+                             # selfHeal never fights the autoscaler
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,15 @@
+# gitops/platform/metrics-server.yaml
+# kind nodes serve self-signed kubelet certs, so metrics-server refuses to
+# scrape them without --kubelet-insecure-tls. EKS kubelet certs validate fine
+# — the flag is only strictly needed for kind and is harmless (but weaker) on
+# EKS. Remove it once everything canonical runs on EKS; add it to the
+# decisions table either way.
+args:
+  - --kubelet-preferred-address-types=InternalIP,Hostname
+  - --kubelet-insecure-tls
+resources:
+  requests:
+    cpu: 20m
+    memory: 50Mi
+  limits:
+    memory: 150Mi

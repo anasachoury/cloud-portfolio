@@ -1,0 +1,21 @@
+# gitops/platform/cluster-autoscaler.yaml
+# clusterName must match the EKS cluster name in terraform.
+# The role ARN comes from: terraform output cluster_autoscaler_role_arn
+autoDiscovery:
+  clusterName: portfolio
+awsRegion: eu-west-1
+rbac:
+  serviceAccount:
+    name: cluster-autoscaler
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/portfolio-cluster-autoscaler
+extraArgs:
+  # default is true, which would pin nodes running Prometheus (emptyDir counts
+  # as local storage) and stop scale-down during quiet periods
+  skip-nodes-with-local-storage: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 300Mi
+  limits:
+    memory: 600Mi

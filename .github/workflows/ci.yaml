@@ -1,0 +1,141 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege by default; individual jobs elevate only what they need.
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── gate 1: secrets in git history, SAST, IaC + dependency CVEs ──────────
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4      # TODO: SHA-pin all actions before going public
+        with:
+          fetch-depth: 0               # gitleaks scans full history
+
+      - name: gitleaks (hardcoded secrets)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # org/private repos also need GITLEAKS_LICENSE (see its README);
+          # personal public repo: works without a license
+
+      - name: semgrep (SAST)
+        run: pip install semgrep && semgrep scan --config auto --error
+
+      - name: trivy (IaC + dependencies)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: fs
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true    # without this, unfixed distro CVEs break main at random, weeks later
+
+  # ── gate 2: render the chart per service, validate against k8s schemas ──
+  validate-charts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install helm + kubeconform
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - name: helm template + kubeconform per service
+        run: |
+          set -euo pipefail
+          for svc in frontend products orders; do
+            echo "== $svc"
+            helm template "$svc" charts/microservice -f "gitops/apps/$svc/values.yaml" > "/tmp/$svc.yaml"
+            kubeconform -strict -summary -ignore-missing-schemas "/tmp/$svc.yaml"
+          done
+
+  # ── gate 3: test, build, scan the image; push to ECR only on main ───────
+  build-push:
+    needs: [security-scan, validate-charts]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write      # OIDC federation — no stored AWS keys anywhere
+      contents: read
+    strategy:
+      fail-fast: false     # see all three scan reports, not just the first failure
+      matrix:
+        service: [frontend, products, orders]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests
+        if: matrix.service != 'frontend'
+        run: pip install pytest -r "services/${{ matrix.service }}/requirements.txt" && pytest "services/${{ matrix.service }}"
+
+      - name: Configure AWS credentials (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-ci
+          aws-region: eu-west-1
+
+      - name: ECR login (main only)
+        if: github.ref == 'refs/heads/main'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build
+        run: docker build -t "${{ matrix.service }}:${{ github.sha }}" "services/${{ matrix.service }}"
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: "${{ matrix.service }}:${{ github.sha }}"
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+
+      - name: Push (main only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          IMG="${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:${{ github.sha }}"
+          docker tag "${{ matrix.service }}:${{ github.sha }}" "$IMG"
+          docker push "$IMG"
+
+  # ── after the matrix: ONE job bumps all tags and pushes ONE commit.
+  #    This is the race fix: parallel jobs never touch git, and CI still
+  #    never touches the cluster — it only pushes images and commits tags. ──
+  update-manifests:
+    needs: build-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+      - name: Bump all image tags, push one commit
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for svc in frontend products orders; do
+            yq -i '.image.tag = strenv(SHA)' "gitops/apps/$svc/values.yaml"
+          done
+          git config user.name  "ci-bot"
+          git config user.email "ci@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy ${SHA}"
+          # no [skip ci] needed: pushes made with GITHUB_TOKEN never trigger
+          # workflows (GitHub guarantee), so this commit will not loop CI
+          git pull --rebase origin main
+          git push

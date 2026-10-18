@@ -1,0 +1,27 @@
+# gitops/bootstrap/root-app.yaml
+# The only manifest you apply by hand (Makefile `up` does it after installing
+# ArgoCD). It watches gitops/apps-root/, which holds the ApplicationSet and the
+# platform Applications. Fixing the original bug: path now matches the repo.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    # cascade delete: `kubectl delete application root -n argocd --wait`
+    # removes child apps AND their resources (incl. the ingress Service that
+    # holds the load balancer) before you run terraform destroy
+    - resources-finalizer.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/anasachoury/cloud-portfolio.git
+    targetRevision: main
+    path: gitops/apps-root
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

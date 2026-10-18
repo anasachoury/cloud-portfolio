@@ -1,0 +1,23 @@
+# gitops/platform/monitoring-values.yaml
+# No persistent volumes on purpose: dashboards are provisioned from Git as
+# ConfigMaps, so every cluster rebuild rebuilds monitoring. Documented tradeoff.
+prometheus:
+  prometheusSpec:
+    retention: 12h
+    # required so Prometheus also picks up ServiceMonitors created by the
+    # microservice chart (anything not labeled with this release's labels)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 800Mi
+grafana:
+  resources:
+    limits:
+      memory: 256Mi
+  # add custom dashboards by committing ConfigMaps labeled grafana_dashboard: "1"
+  sidecar:
+    dashboards:
+      enabled: true

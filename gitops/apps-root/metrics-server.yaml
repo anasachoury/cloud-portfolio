@@ -1,0 +1,36 @@
+# gitops/apps-root/metrics-server.yaml
+# HPAs read CPU/memory from metrics.k8s.io. Nothing installs this on EKS or
+# kind by default (kube-prometheus-stack does NOT provide it) — without this
+# app, every HPA in the cluster sits at <unknown> and never scales.
+#
+# Pattern for all platform apps: upstream chart + values from OUR repo via a
+# multi-source Application ($values ref). Bumping a chart version is a PR.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/metrics-server/
+      chart: metrics-server
+      targetRevision: "3.13.0"
+      helm:
+        releaseName: metrics-server
+        valueFiles:
+          - $values/gitops/platform/metrics-server.yaml
+    - repoURL: https://github.com/anasachoury/cloud-portfolio.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
