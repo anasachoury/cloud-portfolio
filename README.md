@@ -17,7 +17,7 @@ create/destroy sessions instead of 24/7 uptime.
 | GitOps: ArgoCD app-of-apps + ApplicationSet + platform apps | done |
 | CI: gitleaks, semgrep, trivy (IaC + image), kubeconform chart gate | done |
 | Terraform: VPC + EKS cluster stack, IRSA for cluster-autoscaler | done |
-| App code (`services/`) | in progress |
+| App code (`services/`): FastAPI products/orders, nginx frontend, tests | done |
 | Screenshots, load test, demo recording | todo |
 
 ## Layout
@@ -54,6 +54,10 @@ make down          # teardown: apps first (LB), wait for LBs, terraform destroy
   separate Terraform stacks — only the cluster one gets destroyed.
 - CI never touches the cluster: it builds, scans, pushes images to ECR, and
   commits new tags; ArgoCD does the deploying.
+- Deploy-mode steps (ECR push, GitOps tag bump) stay disabled until the repo
+  variable `DEPLOY_READY=true` is set — CI is fully green without an AWS
+  account, and flips into deploy mode with one setting once ECR + the OIDC
+  role exist and `ACCOUNT_ID` is filled in.
 
 ## Cost decisions
 

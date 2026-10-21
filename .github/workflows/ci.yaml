@@ -76,17 +76,25 @@ jobs:
 
       - name: Unit tests
         if: matrix.service != 'frontend'
-        run: pip install pytest -r "services/${{ matrix.service }}/requirements.txt" && pytest "services/${{ matrix.service }}"
+        run: |
+          pip install \
+            -r "services/${{ matrix.service }}/requirements.txt" \
+            -r "services/${{ matrix.service }}/requirements-dev.txt"
+          pytest "services/${{ matrix.service }}"
 
-      - name: Configure AWS credentials (main only)
-        if: github.ref == 'refs/heads/main'
+      # AWS steps run only when the account side exists: set the repo
+      # variable DEPLOY_READY=true (Settings > Secrets and variables > Actions
+      # > Variables) once terraform/persistent (ECR + OIDC role) is applied
+      # and ACCOUNT_ID below is replaced with the real one.
+      - name: Configure AWS credentials (deploy mode only)
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_READY == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-ci
           aws-region: eu-west-1
 
-      - name: ECR login (main only)
-        if: github.ref == 'refs/heads/main'
+      - name: ECR login (deploy mode only)
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_READY == 'true'
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
@@ -101,8 +109,8 @@ jobs:
           exit-code: 1
           ignore-unfixed: true
 
-      - name: Push (main only)
-        if: github.ref == 'refs/heads/main'
+      - name: Push (deploy mode only)
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_READY == 'true'
         run: |
           IMG="${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:${{ github.sha }}"
           docker tag "${{ matrix.service }}:${{ github.sha }}" "$IMG"
@@ -113,7 +121,7 @@ jobs:
   #    never touches the cluster — it only pushes images and commits tags. ──
   update-manifests:
     needs: build-push
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_READY == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

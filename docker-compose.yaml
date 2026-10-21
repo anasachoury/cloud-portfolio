@@ -1,0 +1,33 @@
+# Local no-cluster stack:  docker compose up --build  ->  http://localhost:8080
+services:
+  products:
+    build: ./services/products
+    ports:
+      - "8001:8000"
+
+  orders:
+    build: ./services/orders
+    environment:
+      PRODUCTS_URL: http://products:8000
+      REDIS_URL: redis:6379
+    ports:
+      - "8002:8000"
+    depends_on:
+      - products
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    # pure cache: no persistence, same as the in-cluster manifest
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  frontend:
+    build: ./services/frontend
+    environment:
+      PRODUCTS_UPSTREAM: http://products:8000
+      ORDERS_UPSTREAM: http://orders:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - products
+      - orders

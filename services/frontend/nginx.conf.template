@@ -1,0 +1,33 @@
+# Rendered at container start from env: PRODUCTS_UPSTREAM, ORDERS_UPSTREAM
+# (the nginx-unprivileged image envsubs /etc/nginx/templates into conf.d).
+# If these are unset the config breaks loudly on boot instead of proxying
+# to an empty host — compose and the helm values both set them.
+server {
+    listen 8080;
+    server_name _;
+
+    # kubelet/ArgoCD probes + make fwd targets
+    location = /healthz {
+        access_log off;
+        return 200 "ok";
+    }
+
+    # static storefront
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # /api/products/<x>  ->  ${PRODUCTS_UPSTREAM}/products/<x>
+    location /api/products/ {
+        proxy_pass ${PRODUCTS_UPSTREAM}/products/;
+        proxy_set_header Host $host;
+    }
+
+    # /api/orders/<x>   ->  ${ORDERS_UPSTREAM}/orders/<x>
+    location /api/orders/ {
+        proxy_pass ${ORDERS_UPSTREAM}/orders/;
+        proxy_set_header Host $host;
+    }
+}

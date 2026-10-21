@@ -42,6 +42,14 @@ serviceMonitor:
 # probes hit /healthz on port 8080 — services/frontend's nginx.conf must
 # serve it (location = /healthz { return 200 "ok"; })
 
+env:
+  # nginx.conf.template envsubs these at container start; the Service port
+  # is 80 so no port suffix is needed (compose uses http://products:8000)
+  - name: PRODUCTS_UPSTREAM
+    value: http://products.products.svc.cluster.local
+  - name: ORDERS_UPSTREAM
+    value: http://orders.orders.svc.cluster.local
+
 networkPolicy:
   enabled: true
   # nginx proxies the browser's /api/* calls to the backends
