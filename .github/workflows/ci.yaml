@@ -19,12 +19,12 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4      # TODO: SHA-pin all actions before going public
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           fetch-depth: 0               # gitleaks scans full history
 
       - name: gitleaks (hardcoded secrets)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@4036f303133f36c5017e03c31446353f31572e9e # v2.1.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # org/private repos also need GITLEAKS_LICENSE (see its README);
@@ -34,7 +34,7 @@ jobs:
         run: pip install semgrep && semgrep scan --config auto --error
 
       - name: trivy (IaC + dependencies)
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: fs
           severity: HIGH,CRITICAL
@@ -45,12 +45,19 @@ jobs:
   validate-charts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install helm + kubeconform
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Install helm + kubeconform (pinned, checksummed)
         run: |
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
-          sudo mv kubeconform /usr/local/bin/
+          set -euo pipefail
+          curl -fsSL -o /tmp/helm.tgz https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz
+          echo "fc307327959aa38ed8f9f7e66d45492bb022a66c3e5da6063958254b9767d179  /tmp/helm.tgz" | sha256sum -c
+          tar -C /tmp -xzf /tmp/helm.tgz
+          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+
+          curl -fsSL -o /tmp/kubeconform.tgz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          echo "95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73  /tmp/kubeconform.tgz" | sha256sum -c
+          tar -C /tmp -xzf /tmp/kubeconform.tgz kubeconform
+          sudo mv /tmp/kubeconform /usr/local/bin/
       - name: helm template + kubeconform per service
         run: |
           set -euo pipefail
@@ -72,7 +79,7 @@ jobs:
       matrix:
         service: [frontend, products, orders]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - name: Unit tests
         if: matrix.service != 'frontend'
@@ -88,7 +95,7 @@ jobs:
       # and ACCOUNT_ID below is replaced with the real one.
       - name: Configure AWS credentials (deploy mode only)
         if: github.ref == 'refs/heads/main' && vars.DEPLOY_READY == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # v4.1.0
         with:
           role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-ci
           aws-region: eu-west-1
@@ -96,13 +103,13 @@ jobs:
       - name: ECR login (deploy mode only)
         if: github.ref == 'refs/heads/main' && vars.DEPLOY_READY == 'true'
         id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
 
       - name: Build
         run: docker build -t "${{ matrix.service }}:${{ github.sha }}" "services/${{ matrix.service }}"
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: "${{ matrix.service }}:${{ github.sha }}"
           severity: HIGH,CRITICAL
@@ -126,11 +133,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Install yq
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Install yq (pinned, checksummed)
         run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+          set -euo pipefail
+          curl -fsSL -o /tmp/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          echo "a2c097180dd884a8d50c956ee16a9cec070f30a7947cf4ebf87d5f36213e9ed7  /tmp/yq" | sha256sum -c
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
       - name: Bump all image tags, push one commit
         env:
           SHA: ${{ github.sha }}

@@ -72,4 +72,6 @@ make down          # teardown: apps first (LB), wait for LBs, terraform destroy
 Replace `ACCOUNT_ID` and the ECR registry URLs in `gitops/apps/*/values.yaml`
 before applying.
 
-> Pinned third-party actions are TODO (SHA-pin before depending on CI in anger).
+> All third-party actions are pinned to commit SHAs (with version comments);
+> tool binaries (helm, kubeconform, yq) are installed from pinned release URLs
+> and verified against embedded sha256 checksums — enforced by semgrep in CI.
