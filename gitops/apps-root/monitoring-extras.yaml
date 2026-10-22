@@ -1,0 +1,40 @@
+# gitops/apps-root/monitoring-extras.yaml
+# Grafana dashboard ConfigMap + PrometheusRule, as plain manifests layered
+# on top of the kube-prometheus-stack chart.
+#
+# Why not chart values: dashboards are ConfigMaps and rules are CRs — keeping
+# them as readable YAML means `git diff` on a panel edit shows the actual
+# change, and chart upgrades never touch them.
+#
+# The retry/backoff is ordering insurance: the PrometheusRule CRD is created
+# by the monitoring app; if this app syncs first, the sync fails, backs off
+# and lands on the next attempt instead of sitting degraded until someone
+# resyncs by hand.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-extras
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/anasachoury/cloud-portfolio.git
+    targetRevision: main
+    path: gitops/platform/monitoring-extras
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

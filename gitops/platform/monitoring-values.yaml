@@ -7,6 +7,9 @@ prometheus:
     # required so Prometheus also picks up ServiceMonitors created by the
     # microservice chart (anything not labeled with this release's labels)
     serviceMonitorSelectorNilUsesHelmValues: false
+    # same for PrometheusRules: our rules in gitops/platform/monitoring-extras/
+    # are not chart-labeled either (chart default: true = only its own rules)
+    ruleSelectorNilUsesHelmValues: false
     resources:
       requests:
         cpu: 100m

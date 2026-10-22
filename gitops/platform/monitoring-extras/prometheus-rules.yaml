@@ -1,0 +1,61 @@
+# gitops/platform/monitoring-extras/prometheus-rules.yaml
+# Alerts for the demo story, written against the ACTUAL metrics contract of
+# prometheus-fastapi-instrumentator's default() set (verified in the package
+# source, not guessed):
+#   http_requests_total{handler,status,method}  — status is GROUPED by
+#     default ("2xx", "5xx", not numeric codes), hence status="5xx"
+#   http_request_duration_highr_seconds         — unlabelled high-res histogram
+# Scrape targets only exist for products/orders (frontend is plain nginx with
+# no /metrics); job labels are "<namespace>/<service>" from the ServiceMonitor.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: portfolio-rules
+  namespace: monitoring
+spec:
+  groups:
+    - name: services
+      interval: 30s
+      rules:
+        # short "for" on purpose: this project is demoed, not run 24/7 —
+        # two minutes still rules out blips during deploys (pod churn)
+        - alert: FastAPIHighErrorRate
+          expr: |
+            sum by (job) (rate(http_requests_total{status="5xx"}[5m]))
+              / sum by (job) (rate(http_requests_total[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "5xx error ratio above 5% on {{ $labels.job }}"
+            description: >-
+              More than 5% of requests answered 5xx for two minutes. Demo:
+              kubectl -n products scale deploy/products --replicas=0 and
+              watch the orders service degrade to 503.
+        - alert: ServiceDown
+          expr: up{job=~"(products|orders)/.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "scrape target down: {{ $labels.job }}"
+            description: >-
+              Prometheus could not scrape the service for five minutes —
+              pod gone, NetworkPolicy blocking the monitoring namespace, or
+              the whole namespace missing.
+    - name: autoscaling
+      interval: 30s
+      rules:
+        - alert: HPAMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas
+              >= kube_horizontalpodautoscaler_spec_max_replicas
+          for: 10m
+          labels:
+            severity: info
+          annotations:
+            summary: "HPA {{ $labels.horizontalpodautoscaler }} pinned at its ceiling"
+            description: >-
+              The service ran at max replicas for ten minutes — the load
+              test exceeded the scale ceiling. Either the ceiling or the
+              node group is the next bottleneck.
