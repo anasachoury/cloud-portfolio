@@ -52,13 +52,17 @@ a compromised CI token is "push a commit" — not "kubectl apply".
 | Terraform: persistent stack (state bucket, ECR, GitHub OIDC role) | done |
 | App code (`services/`): FastAPI products/orders, nginx frontend, tests | done |
 | Monitoring: Grafana dashboard + PrometheusRule alerts | done |
-| Screenshots, load-test numbers, demo recording | todo |
+| Local smoke test (`make smoke` — no docker, no cluster) | done |
+| Load test: k6 script + thresholds (numbers from first session) | ready |
+| Demo recording script (docs/DEMO.md) | done |
 
 ## Layout
 
 ```
 services/            app code: frontend (nginx), products, orders (FastAPI)
 charts/microservice  the one reusable Helm chart
+scripts/             smoke.py (native e2e test), loadtest.js (k6)
+docs/                DEMO.md — the recording script
 gitops/
   bootstrap/        root-app (app-of-apps entrypoint)
   apps-root/        ApplicationSet + platform Applications
@@ -68,13 +72,14 @@ terraform/
   persistent/       state bucket, ECR, GitHub OIDC role  (create once)
   cluster/          VPC, EKS, IRSA                          (create/destroy)
 .github/workflows/  ci.yaml
-Makefile            up / down / persist / kind / local targets
+Makefile            up / down / persist / smoke / kind / local targets
 ```
 
 ## Quickstart
 
 ```make
 make help          # list all targets
+make smoke         # end-to-end test of the services — no docker needed
 make local-up      # run the app with docker compose (no cluster)
 make kind-up       # kind cluster + metrics-server, for GitOps practice
 make persist-up    # once per AWS account (see first session below)
@@ -150,6 +155,7 @@ kubectl -n orders set env deploy/orders KILLED=true
 kubectl -n products scale deploy/products --replicas=0
 # 3. Autoscaling: hammer the frontend, watch HPA replicas climb in Grafana
 while true; do curl -s http://$LB/api/orders/ >/dev/null & done
+#    (or the k6 script: make load-test TARGET=http://$LB)
 # 4. Recovery: bring products back, watch the error ratio recover
 kubectl -n products scale deploy/products --replicas=2
 ```

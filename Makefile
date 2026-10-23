@@ -3,7 +3,7 @@ CLUSTER          ?= portfolio
 ARGOCD_CHART_VER ?= 10.10.5   # chart ships Argo CD v3.x — bump deliberately
 TFVARS           := terraform/cluster/cluster.tfvars
 
-.PHONY: help kind-up kind-down install-kind local-up local-down up down persist-up persist-down fwd-argocd fwd-grafana
+.PHONY: help kind-up kind-down install-kind local-up local-down smoke load-test up down persist-up persist-down fwd-argocd fwd-grafana
 
 help: ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -17,6 +17,10 @@ local-up: ## run the app with docker compose, no cluster involved
 	docker compose up --build
 local-down: ## stop the compose stack
 	docker compose down
+smoke: ## end-to-end smoke test, no docker: mini-redis + uvicorn services
+	@if [ -x .venv/bin/python ]; then .venv/bin/python scripts/smoke.py; else python3 scripts/smoke.py; fi
+load-test: ## k6 against TARGET (default http://localhost:8080)
+	@test -n "$$(command -v k6)" || { echo "install k6 first: https://grafana.com/docs/k6/latest/set-up/install-k6/"; exit 1; }	k6 run -e TARGET=$(TARGET) scripts/loadtest.js
 up: ## full EKS session: terraform -> kubeconfig -> argocd -> root app
 	@test -f $(TFVARS) || { echo "copy $(TFVARS).example to $(TFVARS) and set your IP"; exit 1; }	cd terraform/cluster && terraform init -reconfigure	cd terraform/cluster && terraform apply -auto-approve -var-file=cluster.tfvars	aws eks update-kubeconfig --name $(CLUSTER) --region $(REGION)	helm repo add argo https://argoproj.github.io/argo-helm || true	helm repo update	helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace --version $(ARGOCD_CHART_VER)	kubectl apply -f gitops/bootstrap/root-app.yaml	@echo "-- ArgoCD admin password:"	@kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 down: ## teardown: apps first (releases the LB), wait for AWS, then destroy
