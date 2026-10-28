@@ -9,6 +9,15 @@ security-gated GitHub Actions pipeline, on infrastructure defined in Terraform.
 Built against a $20 AWS credit budget — the architecture optimizes for
 create/destroy sessions instead of 24/7 uptime.
 
+<!-- After recording (docs/DEMO.md is the shot list), upload to YouTube and
+     paste the URL below — this line is what recruiters see first. A
+     clickable thumbnail renders better than a bare link:
+     [![demo video](docs/demo-thumb.png)](YOUR_YOUTUBE_URL)             -->
+
+> 📺 **[Watch the ~6-minute demo](YOUR_VIDEO_URL)** — a full session: bring
+> the cluster up, put it under load, break it on purpose, watch Git heal it,
+> tear it down, and see what it cost.
+
 ## Architecture
 
 ```
