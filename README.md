@@ -9,12 +9,18 @@ security-gated GitHub Actions pipeline, on infrastructure defined in Terraform.
 Built against a $20 AWS credit budget — the architecture optimizes for
 create/destroy sessions instead of 24/7 uptime.
 
-<!-- After recording (docs/DEMO.md is the shot list), upload to YouTube and
-     paste the URL below — this line is what recruiters see first. A
-     clickable thumbnail renders better than a bare link:
+> 🎬 **[Watch the 108-second architecture explainer](docs/architecture-explainer.mp4)**
+> — animated walkthrough of the whole system: the three services, the four
+> CI gates, ArgoCD reconciliation, monitoring, teardown, and the cost math.
+> (Rendered programmatically — see `scripts/render_explainer.py`.)
+
+<!-- After recording the live demo (docs/DEMO.md is the shot list,
+     docs/SCRIPT.md the narration), upload to YouTube and paste the URL
+     below — this line is what recruiters see first. A clickable thumbnail
+     renders better than a bare link:
      [![demo video](docs/demo-thumb.png)](YOUR_YOUTUBE_URL)             -->
 
-> 📺 **[Watch the ~6-minute demo](YOUR_VIDEO_URL)** — a full session: bring
+> 📺 **[Watch the ~6-minute live demo](YOUR_VIDEO_URL)** — a full session: bring
 > the cluster up, put it under load, break it on purpose, watch Git heal it,
 > tear it down, and see what it cost.
 
